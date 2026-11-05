@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MFS Wallet - Login</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header><h1>MFS Wallet (Demo)</h1></header>
+  <div class="login-wrap card">
+    <h2>Log in</h2>
+    <form id="login-form" novalidate>
+      <label for="phone">Mobile number</label>
+      <input id="phone" data-testid="login-phone" inputmode="numeric" maxlength="11" placeholder="01XXXXXXXXX">
+      <label for="pin">PIN</label>
+      <input id="pin" data-testid="login-pin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN">
+      <button type="submit" data-testid="login-submit">Log in</button>
+      <div class="msg err" data-testid="login-error" role="alert"></div>
+    </form>
+    <p class="hint">Demo accounts:<br>Customer 01711111111 / 1234<br>Customer 01822222222 / 5678<br>Agent 01933333333 / 1111</p>
+  </div>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.querySelector('[data-testid="login-error"]');
+      err.textContent = '';
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.value.trim(), pin: pin.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) { err.textContent = data.message; return; }
+      sessionStorage.setItem('token', data.token);
+      location.href = '/dashboard.html';
+    });
+  </script>
+</body>
+</html>

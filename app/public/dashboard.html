@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MFS Wallet - Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1 data-testid="welcome-name">MFS Wallet</h1>
+    <button class="secondary" data-testid="logout">Log out</button>
+  </header>
+  <main>
+    <section class="card">
+      <h2>Available balance</h2>
+      <div class="balance" data-testid="balance">৳ --</div>
+    </section>
+
+    <div class="row">
+      <section class="card">
+        <h2>Send Money</h2>
+        <form id="send-form" novalidate>
+          <label for="send-to">Receiver number</label>
+          <input id="send-to" data-testid="send-receiver" inputmode="numeric" maxlength="11">
+          <label for="send-amount">Amount (BDT)</label>
+          <input id="send-amount" data-testid="send-amount" inputmode="decimal">
+          <label for="send-pin">PIN</label>
+          <input id="send-pin" data-testid="send-pin" type="password" maxlength="4">
+          <button type="submit" data-testid="send-submit">Send</button>
+          <div class="msg" data-testid="send-message" role="status"></div>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Cash Out</h2>
+        <form id="cashout-form" novalidate>
+          <label for="co-agent">Agent number</label>
+          <input id="co-agent" data-testid="cashout-agent" inputmode="numeric" maxlength="11">
+          <label for="co-amount">Amount (BDT)</label>
+          <input id="co-amount" data-testid="cashout-amount" inputmode="decimal">
+          <label for="co-pin">PIN</label>
+          <input id="co-pin" data-testid="cashout-pin" type="password" maxlength="4">
+          <button type="submit" data-testid="cashout-submit">Cash Out</button>
+          <div class="msg" data-testid="cashout-message" role="status"></div>
+        </form>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Recent transactions</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>TrxID</th><th>Type</th><th>Amount</th><th>Fee</th><th>Counterparty</th></tr></thead>
+          <tbody data-testid="trx-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const token = sessionStorage.getItem('token');
+    if (!token) location.href = '/';
+    let me = null;
+
+    const api = async (path, opts = {}) => {
+      const res = await fetch(path, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      });
+      const data = await res.json();
+      if (res.status === 401) { sessionStorage.clear(); location.href = '/'; }
+      return { ok: res.ok, data };
+    };
+
+    const fmt = (n) => '৳ ' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    async function refresh() {
+      const { data } = await api('/api/balance');
+      me = data;
+      document.querySelector('[data-testid="welcome-name"]').textContent = 'Hi, ' + data.name;
+      document.querySelector('[data-testid="balance"]').textContent = fmt(data.balance);
+      const { data: rows } = await api('/api/transactions');
+      document.querySelector('[data-testid="trx-rows"]').innerHTML = rows.map((t) => {
+        const out = t.from === me.phone;
+        const other = out ? t.to : t.from;
+        return `<tr data-testid="trx-row"><td>${t.trxId}</td><td>${t.type}</td>` +
+               `<td>${out ? '-' : '+'}${fmt(t.amount)}</td><td>${fmt(out ? t.fee : 0)}</td><td>${other}</td></tr>`;
+      }).join('');
+    }
+
+    function wire(formId, path, fields, msgTestId, bodyKeys) {
+      document.getElementById(formId).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.querySelector(`[data-testid="${msgTestId}"]`);
+        msg.className = 'msg'; msg.textContent = '';
+        const [to, amount, pin] = fields.map((id) => document.getElementById(id));
+        const body = { [bodyKeys[0]]: to.value.trim(), amount: Number(amount.value), pin: pin.value };
+        const { ok, data } = await api(path, { method: 'POST', body: JSON.stringify(body) });
+        if (ok) {
+          msg.className = 'msg ok';
+          msg.textContent = `Successful. TrxID: ${data.trxId}. Fee: ${fmt(data.fee)}`;
+          e.target.reset();
+          refresh();
+        } else {
+          msg.className = 'msg err';
+          msg.textContent = data.message;
+        }
+      });
+    }
+
+    wire('send-form', '/api/send-money', ['send-to', 'send-amount', 'send-pin'], 'send-message', ['receiverPhone']);
+    wire('cashout-form', '/api/cash-out', ['co-agent', 'co-amount', 'co-pin'], 'cashout-message', ['agentPhone']);
+
+    document.querySelector('[data-testid="logout"]').addEventListener('click', async () => {
+      await api('/api/logout', { method: 'POST' });
+      sessionStorage.clear();
+      location.href = '/';
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
